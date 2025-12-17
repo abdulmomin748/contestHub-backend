@@ -17,13 +17,8 @@ const app = express();
 // middleware
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://b12-m11-session.web.app",
-    ],
-    credentials: true,
-    optionSuccessStatus: 200,
+    origin: "http://localhost:5173", // ✅ exact frontend URL
+    credentials: true, // ✅ allow cookies
   })
 );
 app.use(express.json());
@@ -62,6 +57,7 @@ async function run() {
 
     const db = client.db("contestHub_db");
     const contestCollections = db.collection("contests");
+    const registeredCollections = db.collection("registered");
 
     // contest api
     app.get("/contests", async (req, res) => {
@@ -81,6 +77,19 @@ async function run() {
     });
 
     // register api
+    app.get("/contest-is-registered", async (req, res) => {
+      const { contestId, email } = req.query;
+      console.log(contestId);
+
+      const registered = await registeredCollections.findOne({
+        contestId,
+        user_email: email,
+      });
+
+      res.send({ registered: !!registered });
+      // res.send({ msg: "is registerd" });
+    });
+
     app.post("/contest/payment-register", async (req, res) => {
       const registerInf = req.body;
 
@@ -103,73 +112,95 @@ async function run() {
         success_url: `${YOUR_DOMAIN}/contest/${registerInf.contestId}?session_id={CHECKOUT_SESSION_ID}`,
         // cancel_url: `${YOUR_DOMAIN}/dashBoard/payment-cancelled?session_id={CHECKOUT_SESSION_ID}`,
         // set hoina
+        customer_email: registerInf.userEmail,
         metadata: {
           contestId: registerInf.contestId,
           contestName: registerInf.contestName,
+          participantsCount: registerInf.participantsCount,
+          customer_email: registerInf.userEmail,
         },
       });
       res.send({ url: session.url });
     });
+
+    app.post("/contest/free-register", async (req, res) => {
+      const { contestId, contestName, userEmail } = req.body;
+
+      const alreadyRegistered = await registeredCollections.findOne({
+        contestId,
+        user_email: userEmail,
+      });
+
+      if (alreadyRegistered) {
+        return res.send({ message: "Already registered" });
+      }
+
+      await contestCollections.updateOne(
+        { _id: new ObjectId(contestId) },
+        { $inc: { participantsCount: 1 } }
+      );
+
+      const registerInfo = {
+        contestId,
+        contestName,
+        user_email: userEmail,
+        paymentStatus: "free",
+        registeredAt: new Date(),
+      };
+
+      await registeredCollections.insertOne(registerInfo);
+
+      res.send({ success: true });
+    });
+
     app.patch("/payment-success", async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      // use the previous trackingId created during parcel  create which was set to the session metadata during session createtion
-      const trackingId = session.metadata.trackingId;
 
       // prevent double posting payment_history
       const transactionId = session.payment_intent;
       const query = { transactionId: transactionId };
 
-      const paymentExist = await paymentCollectins.findOne(query);
+      const paymentExist = await registeredCollections.findOne(query);
       // console.log(paymentExist);
 
       if (paymentExist) {
         return res.send({
           message: "Already exist",
           transactionId,
-          trackingId: paymentExist.trackingId,
           paymentInfo: paymentExist,
         });
       }
 
       if (session.payment_status === "paid") {
-        const parcelId = session.metadata.parcelId;
-        const query = { _id: new ObjectId(parcelId) };
-        const updatePItm = {
-          $set: {
-            paymentSatus: "paid",
-            deliveryStatus: "parcel_paid",
-          },
+        const contestId = session.metadata.contestId;
+        const query = { _id: new ObjectId(contestId) };
+        const updateContestItem = {
+          $inc: { participantsCount: 1 },
+          // $addToSet: { participants: userId }, // prevents duplicate registration
         };
         const options = {};
-        const result = await parcelCollections.updateOne(
+        const result = await contestCollections.updateOne(
           query,
-          updatePItm,
+          updateContestItem,
           options
         );
         const paymentHistory = {
           amount: session.amount_total / 100,
-          currency: session.currency,
-          percelName: session.metadata.percelName,
-          customeremail: session.customer_email,
-          parcelId: session.metadata.parcelId,
+          contestName: session.metadata.contestName,
+          customer_email: session.metadata.customer_email,
+          contestId: session.metadata.contestId,
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
-          trackingId: trackingId,
-          paidAt: new Date(),
         };
-
-        logTracking(trackingId, "parcel_paid");
-
-        const payementInsetResult = await paymentCollectins.insertOne(
+        const registeredResult = await registeredCollections.insertOne(
           paymentHistory
         );
         return res.send({
           success: true,
-          modifyPercel: result,
+          modifyContest: result,
           paymentInfo: paymentHistory,
-          trackingId: trackingId,
+          registeredResult: registeredResult,
           transactionId: session.payment_intent,
         });
       }
