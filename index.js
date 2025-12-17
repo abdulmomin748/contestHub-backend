@@ -58,6 +58,7 @@ async function run() {
     const db = client.db("contestHub_db");
     const contestCollections = db.collection("contests");
     const registeredCollections = db.collection("registered");
+    const taskSubCollections = db.collection("submissions");
 
     // contest api
     app.get("/contests", async (req, res) => {
@@ -75,7 +76,27 @@ async function run() {
       const result = await contestCollections.findOne(query);
       res.send(result);
     });
+    app.get("/contest-submission", async (req, res) => {
+      const { contestId, email } = req.query;
+      const submissionExist = await taskSubCollections.findOne({
+        contestId,
+        participantEmail: email,
+      });
+      console.log("/contest-submission", submissionExist);
+      res.send({ submissionTaskAlreadyExist: !!submissionExist });
+    });
+    app.post("/contest/submission", async (req, res) => {
+      const submissionInfo = req.body;
+      const query = { contestId: submissionInfo.contestId };
 
+      // const submissionExist = taskSubCollections.findOne(query);
+      // if (submissionExist) {
+      //   return res.status(409).send({ message: "submissionExist" });
+      // }
+      
+      const result = await taskSubCollections.insertOne(submissionInfo);
+      res.send(result);
+    });
     // register api
     app.get("/contest-is-registered", async (req, res) => {
       const { contestId, email } = req.query;
@@ -92,11 +113,12 @@ async function run() {
     app.get("/registered", async (req, res) => {
       const { email } = req.query;
       const query = { customer_email: email };
-      const registered = registeredCollections.find(query).sort({deadline: 1})
+      const registered = registeredCollections
+        .find(query)
+        .sort({ deadline: 1 });
       const result = await registered.toArray();
       res.send(result);
-      console.log(req.query,result);
-      
+      console.log(req.query, result);
     });
     app.post("/contest/payment-register", async (req, res) => {
       const registerInf = req.body;
