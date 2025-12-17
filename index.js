@@ -79,19 +79,28 @@ async function run() {
     // register api
     app.get("/contest-is-registered", async (req, res) => {
       const { contestId, email } = req.query;
-      console.log(contestId);
+      console.log(contestId, email);
 
       const registered = await registeredCollections.findOne({
         contestId,
-        user_email: email,
+        customer_email: email,
       });
 
       res.send({ registered: !!registered });
       // res.send({ msg: "is registerd" });
     });
-
+    app.get("/registered", async (req, res) => {
+      const { email } = req.query;
+      const query = { customer_email: email };
+      const registered = registeredCollections.find(query).sort({deadline: 1})
+      const result = await registered.toArray();
+      res.send(result);
+      console.log(req.query,result);
+      
+    });
     app.post("/contest/payment-register", async (req, res) => {
       const registerInf = req.body;
+      console.log(registerInf);
 
       const amount = parseInt(registerInf.registrationFee) * 100; // 1tk =100 poisa
       const session = await stripe.checkout.sessions.create({
@@ -118,17 +127,18 @@ async function run() {
           contestName: registerInf.contestName,
           participantsCount: registerInf.participantsCount,
           customer_email: registerInf.userEmail,
+          deadline: registerInf.deadline,
         },
       });
       res.send({ url: session.url });
     });
 
     app.post("/contest/free-register", async (req, res) => {
-      const { contestId, contestName, userEmail } = req.body;
+      const { contestId, contestName, userEmail, deadline } = req.body;
 
       const alreadyRegistered = await registeredCollections.findOne({
         contestId,
-        user_email: userEmail,
+        customer_email: userEmail,
       });
 
       if (alreadyRegistered) {
@@ -143,9 +153,10 @@ async function run() {
       const registerInfo = {
         contestId,
         contestName,
-        user_email: userEmail,
+        customer_email: userEmail,
         paymentStatus: "free",
         registeredAt: new Date(),
+        deadline,
       };
 
       await registeredCollections.insertOne(registerInfo);
@@ -192,6 +203,7 @@ async function run() {
           contestId: session.metadata.contestId,
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
+          deadline: session.metadata.deadline,
         };
         const registeredResult = await registeredCollections.insertOne(
           paymentHistory
@@ -206,6 +218,32 @@ async function run() {
       }
       return res.send({ message: false });
     });
+
+    // users api
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+        user.role = "user";
+        user.createdAt = new Date();
+
+        const query = { email: user.email };
+        const userExist = await usersCollections.findOne(query);
+
+        if (userExist) {
+          return res.status(409).json({ message: "user already exist" });
+        }
+
+        const result = await usersCollections.insertOne(user);
+
+        return res.status(201).json({
+          insertedId: result.insertedId,
+          message: "User created",
+        });
+      } catch (error) {
+        return res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
