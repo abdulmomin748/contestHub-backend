@@ -66,7 +66,7 @@ async function run() {
       const contests = contestCollections
         .find(query)
         .sort({ participantsCount: -1 })
-        .limit(5);
+        // .limit(5);
       const cursor = await contests.toArray();
       res.send(cursor);
     });
@@ -85,6 +85,12 @@ async function run() {
       console.log("/contest-submission", submissionExist);
       res.send({ submissionTaskAlreadyExist: !!submissionExist });
     });
+    app.post("/contest", async (req, res) => {
+      const constestInfo = req.body;
+      const result = await contestCollections.insertOne(constestInfo);
+      res.send(result);
+      console.log(constestInfo, result);
+    });
     app.post("/contest/submission", async (req, res) => {
       const submissionInfo = req.body;
       const query = { contestId: submissionInfo.contestId };
@@ -93,7 +99,7 @@ async function run() {
       // if (submissionExist) {
       //   return res.status(409).send({ message: "submissionExist" });
       // }
-      
+
       const result = await taskSubCollections.insertOne(submissionInfo);
       res.send(result);
     });
