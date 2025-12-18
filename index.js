@@ -61,12 +61,24 @@ async function run() {
     const taskSubCollections = db.collection("submissions");
 
     // contest api
+    app.get("/user-created-contest", async (req, res) => {
+      const { email } = req.query;
+      let query = { userEmail: email };
+      // if (email) {
+      //   ;
+      // }
+      const contests = contestCollections.find(query).sort({ deadline: -1 });
+      const cursor = await contests.toArray();
+      res.send(cursor);
+      console.log(email, req.query);
+    });
+
     app.get("/contests", async (req, res) => {
       const query = {};
       const contests = contestCollections
         .find(query)
-        .sort({ participantsCount: -1 })
-        // .limit(5);
+        .sort({ participantsCount: -1 });
+      // .limit(5);
       const cursor = await contests.toArray();
       res.send(cursor);
     });
@@ -87,9 +99,28 @@ async function run() {
     });
     app.post("/contest", async (req, res) => {
       const constestInfo = req.body;
+      constestInfo.participantsCount = 0;
+      constestInfo.status = "pending";
       const result = await contestCollections.insertOne(constestInfo);
       res.send(result);
       console.log(constestInfo, result);
+    });
+    app.patch("/contest/:id", async (req, res) => {
+      const updateContestInf = req.body;
+      const query = { _id: new ObjectId(req.params.id) };
+      const contest = await contestCollections.findOne(query);
+      if (contest.status !== "pending") {
+        return res
+          .status(403)
+          .send({ message: "cannot edit for status pending" });
+      }
+      const updateDoc = {
+        $set: updateContestInf,
+      };
+
+      const result = await contestCollections.updateOne(query, updateDoc);
+      console.log(updateContestInf, contest, query, updateDoc, result);
+      res.send(result);
     });
     app.post("/contest/submission", async (req, res) => {
       const submissionInfo = req.body;
