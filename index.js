@@ -60,6 +60,15 @@ async function run() {
     const registeredCollections = db.collection("registered");
     const taskSubCollections = db.collection("submissions");
 
+    // taks submission API
+    app.get("/task-submission/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { contestId: id };
+      const result = await taskSubCollections.find(query).toArray();
+      res.send(result);
+      console.log(query, result);
+    });
+
     // contest api
     app.get("/user-created-contest", async (req, res) => {
       const { email } = req.query;
@@ -119,7 +128,6 @@ async function run() {
       };
 
       const result = await contestCollections.updateOne(query, updateDoc);
-      console.log(updateContestInf, contest, query, updateDoc, result);
       res.send(result);
     });
     app.post("/contest/submission", async (req, res) => {
@@ -159,7 +167,7 @@ async function run() {
     });
     app.post("/contest/payment-register", async (req, res) => {
       const registerInf = req.body;
-      console.log(registerInf);
+      console.log("/contest/payment-register", registerInf);
 
       const amount = parseInt(registerInf.registrationFee) * 100; // 1tk =100 poisa
       const session = await stripe.checkout.sessions.create({
@@ -267,6 +275,8 @@ async function run() {
         const registeredResult = await registeredCollections.insertOne(
           paymentHistory
         );
+        console.log("registeredResult", registeredResult);
+
         return res.send({
           success: true,
           modifyContest: result,
