@@ -313,7 +313,26 @@ async function run() {
         return res.status(500).json({ message: "Internal server error" });
       }
     });
+    app.get("/users", async (req, res) => {
+      const query = {};
+      const cursor = usersCollections.find(query).sort({ createdAt: -1 });
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.patch("/users/:id/role", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updateRoleInfo = req.body;
+      const updateRole = {
+        $set: {
+          role: updateRoleInfo.role,
+        },
+      };
+      const result = await usersCollections.updateOne(query, updateRole);
+      console.log(result);
 
+      res.send(result);
+    });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
