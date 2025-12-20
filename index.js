@@ -59,6 +59,7 @@ async function run() {
     const contestCollections = db.collection("contests");
     const registeredCollections = db.collection("registered");
     const taskSubCollections = db.collection("submissions");
+    const usersCollections = db.collection("users");
 
     // taks submission API
     app.get("/task-submission/:id", async (req, res) => {
@@ -66,7 +67,7 @@ async function run() {
       const query = { contestId: id };
       const result = await taskSubCollections.find(query).toArray();
       res.send(result);
-      console.log(query, result);
+      // console.log(query, result);
     });
 
     // contest api
@@ -79,7 +80,7 @@ async function run() {
       const contests = contestCollections.find(query).sort({ deadline: -1 });
       const cursor = await contests.toArray();
       res.send(cursor);
-      console.log(email, req.query);
+      // console.log(email, req.query);
     });
 
     app.get("/contests", async (req, res) => {
@@ -103,7 +104,7 @@ async function run() {
         contestId,
         participantEmail: email,
       });
-      console.log("/contest-submission", submissionExist);
+      // console.log("/contest-submission", submissionExist);
       res.send({ submissionTaskAlreadyExist: !!submissionExist });
     });
     app.post("/contest", async (req, res) => {
@@ -112,7 +113,7 @@ async function run() {
       constestInfo.status = "pending";
       const result = await contestCollections.insertOne(constestInfo);
       res.send(result);
-      console.log(constestInfo, result);
+      // console.log(constestInfo, result);
     });
     app.patch("/contest/:id", async (req, res) => {
       const updateContestInf = req.body;
@@ -145,7 +146,7 @@ async function run() {
     // register api
     app.get("/contest-is-registered", async (req, res) => {
       const { contestId, email } = req.query;
-      console.log(contestId, email);
+      // console.log(contestId, email);
 
       const registered = await registeredCollections.findOne({
         contestId,
@@ -163,11 +164,11 @@ async function run() {
         .sort({ deadline: 1 });
       const result = await registered.toArray();
       res.send(result);
-      console.log(req.query, result);
+      // console.log(req.query, result);
     });
     app.post("/contest/payment-register", async (req, res) => {
       const registerInf = req.body;
-      console.log("/contest/payment-register", registerInf);
+      // console.log("/contest/payment-register", registerInf);
 
       const amount = parseInt(registerInf.registrationFee) * 100; // 1tk =100 poisa
       const session = await stripe.checkout.sessions.create({
@@ -275,7 +276,7 @@ async function run() {
         const registeredResult = await registeredCollections.insertOne(
           paymentHistory
         );
-        console.log("registeredResult", registeredResult);
+        // console.log("registeredResult", registeredResult);
 
         return res.send({
           success: true,
@@ -303,7 +304,7 @@ async function run() {
         }
 
         const result = await usersCollections.insertOne(user);
-
+        console.log(user, userExist, result);
         return res.status(201).json({
           insertedId: result.insertedId,
           message: "User created",
