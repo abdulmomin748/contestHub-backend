@@ -71,6 +71,7 @@ async function run() {
     });
 
     // contest api
+
     app.get("/user-created-contest", async (req, res) => {
       const { email } = req.query;
       let query = { userEmail: email };
@@ -82,13 +83,34 @@ async function run() {
       res.send(cursor);
       // console.log(email, req.query);
     });
-
-    app.get("/contests", async (req, res) => {
+    app.get("/manage-contests", async (req, res) => {
       const query = {};
+      const contests = contestCollections.find(query).sort({ deadline: -1 });
+      const cursor = await contests.toArray();
+      res.send(cursor);
+    });
+    app.get("/contests-popular", async (req, res) => {
+      const { status } = req.query;
+      const query = {};
+      if (status) {
+        query.status = status;
+      }
+      const contests = contestCollections
+        .find(query)
+        .sort({ participantsCount: -1 })
+        .limit(5);
+      const cursor = await contests.toArray();
+      res.send(cursor);
+    });
+    app.get("/all-contests", async (req, res) => {
+      const { status } = req.query;
+      const query = {};
+      if (status) {
+        query.status = status;
+      }
       const contests = contestCollections
         .find(query)
         .sort({ participantsCount: -1 });
-      // .limit(5);
       const cursor = await contests.toArray();
       res.send(cursor);
     });
@@ -104,7 +126,7 @@ async function run() {
         contestId,
         participantEmail: email,
       });
-      // console.log("/contest-submission", submissionExist);
+      console.log("/contest-submission", submissionExist);
       res.send({ submissionTaskAlreadyExist: !!submissionExist });
     });
     app.post("/contest", async (req, res) => {
@@ -131,6 +153,24 @@ async function run() {
       const result = await contestCollections.updateOne(query, updateDoc);
       res.send(result);
     });
+    app.patch("/contestStatus/:id/role", async (req, res) => {
+      const id = req.params.id;
+      const status = req.body.status;
+      const query = { _id: new ObjectId(id) };
+
+      const updateContestStatus = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await contestCollections.updateOne(
+        query,
+        updateContestStatus
+      );
+      console.log(id, status, updateContestStatus, result);
+
+      res.send(result);
+    });
     app.post("/contest/submission", async (req, res) => {
       const submissionInfo = req.body;
       const query = { contestId: submissionInfo.contestId };
@@ -141,8 +181,17 @@ async function run() {
       // }
 
       const result = await taskSubCollections.insertOne(submissionInfo);
+      console.log("/contest/submission", result);
+
+      res.send(result, submissionInfo);
+    });
+    app.delete("/contest/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await contestCollections.deleteOne(query);
       res.send(result);
     });
+
     // register api
     app.get("/contest-is-registered", async (req, res) => {
       const { contestId, email } = req.query;
