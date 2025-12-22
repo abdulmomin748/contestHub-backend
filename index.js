@@ -60,18 +60,126 @@ async function run() {
     const registeredCollections = db.collection("registered");
     const taskSubCollections = db.collection("submissions");
     const usersCollections = db.collection("users");
+    const winnerCollections = db.collection("winners");
 
-    // taks submission API
+    // winner api
+    app.get("/winnerContests", async (req, res) => {
+      const query = { participantEmail: req.query.email };
+      const winner = winnerCollections.find(query);
+      const cursor = await winner.toArray();
+      res.send(cursor);
+    });
+
+    // task submission
     app.get("/task-submission/:id", async (req, res) => {
       const { id } = req.params;
-      const query = { contestId: id };
-      const result = await taskSubCollections.find(query).toArray();
+      const result = await taskSubCollections
+        .aggregate([
+          { $match: { contestId: id } },
+          {
+            $lookup: {
+              from: "contests",
+              // If your contestId is a String and _id is ObjectId,
+              // you might need to convert it first
+              let: { cId: "$contestId" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$_id", { $toObjectId: "$$cId" }] },
+                  },
+                },
+              ],
+              as: "contestDetails",
+            },
+          },
+          { $unwind: "$contestDetails" },
+        ])
+        .toArray();
       res.send(result);
-      // console.log(query, result);
+    });
+    app.patch("/task-submission/winner/:id", async (req, res) => {
+      const { id } = req.params;
+      const winnerInf = req.body; // This now includes prizeMoney from frontend
+      const { contestId, participantEmail } = winnerInf;
+
+      // 1. Guard: Check if winner already exists
+      const existingWinner = await winnerCollections.findOne({
+        contestId: contestId,
+      });
+      if (existingWinner) {
+        return res.status(400).send({ message: "Winner already declared." });
+      }
+
+      // 2. Update Submission status
+      await taskSubCollections.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "winner" } }
+      );
+
+      // 3. Insert into Winners collection (Includes the prize money)
+      const winnerColl = await winnerCollections.insertOne(winnerInf);
+
+      // 4. Update Contest status
+      const result = await contestCollections.updateOne(
+        { _id: new ObjectId(contestId) },
+        { $set: { status: "completed" } }
+      );
+
+      // 5. INCREMENT WIN QUANTITY for the user
+      // This looks for the user by email and adds 1 to their winCount
+      const userUpdate = await usersCollections.updateOne(
+        { email: participantEmail },
+        { $inc: { winCount: 1 } }
+      );
+      res.send({ result, winnerColl, userUpdate });
+    });
+    app.get("/task-submissions/isWinner/:contestId", async (req, res) => {
+      const { contestId } = req.params;
+      const result = await taskSubCollections
+        .aggregate([
+          // 1. Find only submissions for THIS contest
+          { $match: { contestId: contestId } },
+          // 2. Look into the 'contests' collection
+          {
+            $lookup: {
+              from: "contests", // Name of the contest collection
+              localField: "contestId", // The ID stored in taskSubCollections
+              foreignField: "_id", // The ID in the contests collection
+              as: "contestDetails", // This will create an array
+            },
+          },
+          // 3. Turn the array into a single object so it's easier to use
+          { $unwind: "$contestDetails" },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    app.post("/contest/submission", async (req, res) => {
+      const submissionInfo = req.body;
+      submissionInfo.status = "pending";
+      const query = { contestId: submissionInfo.contestId };
+
+      // const submissionExist = taskSubCollections.findOne(query);
+      // if (submissionExist) {
+      //   return res.status(409).send({ message: "submissionExist" });
+      // }
+
+      const result = await taskSubCollections.insertOne(submissionInfo);
+      console.log("/contest/submission", result);
+
+      res.send(result, submissionInfo);
+    });
+    app.get("/contest-submission", async (req, res) => {
+      const { contestId, email } = req.query;
+      const submissionExist = await taskSubCollections.findOne({
+        contestId,
+        participantEmail: email,
+      });
+      console.log("/contest-submission", submissionExist);
+      res.send({ submissionTaskAlreadyExist: !!submissionExist });
     });
 
     // contest api
-
     app.get("/user-created-contest", async (req, res) => {
       const { email } = req.query;
       let query = { userEmail: email };
@@ -120,15 +228,7 @@ async function run() {
       const result = await contestCollections.findOne(query);
       res.send(result);
     });
-    app.get("/contest-submission", async (req, res) => {
-      const { contestId, email } = req.query;
-      const submissionExist = await taskSubCollections.findOne({
-        contestId,
-        participantEmail: email,
-      });
-      console.log("/contest-submission", submissionExist);
-      res.send({ submissionTaskAlreadyExist: !!submissionExist });
-    });
+
     app.post("/contest", async (req, res) => {
       const constestInfo = req.body;
       constestInfo.participantsCount = 0;
@@ -171,20 +271,7 @@ async function run() {
 
       res.send(result);
     });
-    app.post("/contest/submission", async (req, res) => {
-      const submissionInfo = req.body;
-      const query = { contestId: submissionInfo.contestId };
 
-      // const submissionExist = taskSubCollections.findOne(query);
-      // if (submissionExist) {
-      //   return res.status(409).send({ message: "submissionExist" });
-      // }
-
-      const result = await taskSubCollections.insertOne(submissionInfo);
-      console.log("/contest/submission", result);
-
-      res.send(result, submissionInfo);
-    });
     app.delete("/contest/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
