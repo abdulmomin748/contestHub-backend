@@ -4,20 +4,22 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
 const port = process.env.PORT || 3000;
-// const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString(
-//   'utf-8'
-// )
-// const serviceAccount = JSON.parse(decoded)
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// })
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf-8"
+);
+const serviceAccount = JSON.parse(decoded);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
-const YOUR_DOMAIN = `http://localhost:5173`;
+const YOUR_DOMAIN = `https://contesthub-a3d0d.web.app`;
 const app = express();
 // middleware
 app.use(
   cors({
-    origin: "http://localhost:5173", // ✅ exact frontend URL
+    origin: "https://contesthub-a3d0d.web.app", // ✅ exact frontend URL
     credentials: true, // ✅ allow cookies
   })
 );
@@ -510,9 +512,9 @@ async function run() {
 
       res.send(result);
     });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
