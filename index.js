@@ -200,32 +200,73 @@ async function run() {
     app.get("/contests-popular", async (req, res) => {
       const { status } = req.query;
       const query = {};
+
       if (status) {
-        query.status = status;
+        // Convert single string to array if needed, then use $in
+        const statusArray = Array.isArray(status) ? status : [status];
+        query.status = { $in: statusArray };
       }
-      const contests = contestCollections
+
+      const result = await contestCollections
         .find(query)
         .sort({ participantsCount: -1 })
-        .limit(5);
-      const cursor = await contests.toArray();
-      res.send(cursor);
+        .limit(5)
+        .toArray();
+
+      res.send(result);
     });
     app.get("/all-contests", async (req, res) => {
       const { status } = req.query;
       const query = {};
+
       if (status) {
-        query.status = status;
+        // If status is an array, use it. If it's a single string, wrap it in an array.
+        const statusFilter = Array.isArray(status) ? status : [status];
+
+        // Use $in to match ANY of the statuses in the array
+        query.status = { $in: statusFilter };
       }
-      const contests = contestCollections
+
+      const result = await contestCollections
         .find(query)
-        .sort({ participantsCount: -1 });
-      const cursor = await contests.toArray();
-      res.send(cursor);
+        .sort({ participantsCount: -1 })
+        .toArray();
+
+      res.send(result);
     });
     app.get("/contest/:id", async (req, res) => {
       const { id } = req.params;
-      const query = { _id: new ObjectId(id) };
-      const result = await contestCollections.findOne(query);
+
+      const result = await contestCollections
+        .aggregate([
+          { $match: { _id: new ObjectId(id) } },
+          {
+            $lookup: {
+              from: "winners",
+              let: { contest_id: "$_id" }, // Local contest _id (ObjectId)
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      // Convert the string contestId in 'winners' to ObjectId to match
+                      $eq: ["$contestId", { $toString: "$$contest_id" }],
+                      // OR use: $eq: [{ $toObjectId: "$contestId" }, "$$contest_id"]
+                    },
+                  },
+                },
+              ],
+              as: "winnerData",
+            },
+          },
+          {
+            $addFields: {
+              winner: { $arrayElemAt: ["$winnerData", 0] },
+            },
+          },
+          { $project: { winnerData: 0 } },
+        ])
+        .next();
+
       res.send(result);
     });
 
