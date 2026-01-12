@@ -14,12 +14,12 @@ admin.initializeApp({
 });
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
-const YOUR_DOMAIN = `https://contesthub-a3d0d.web.app`;
+const YOUR_DOMAIN = `http://localhost:5173`;
 const app = express();
 // middleware
 app.use(
   cors({
-    origin: "https://contesthub-a3d0d.web.app", // ✅ exact frontend URL
+    origin: "http://localhost:5173", // ✅ exact frontend URL
     credentials: true, // ✅ allow cookies
   })
 );
@@ -497,6 +497,13 @@ async function run() {
       const cursor = usersCollections.find(query).sort({ createdAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
+    });
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollections.findOne(query);
+      res.send({ role: user?.role || "user" });
+      console.log(email);
     });
     app.patch("/users/:id/role", async (req, res) => {
       const id = req.params.id;
